@@ -1,0 +1,56 @@
+// ============================================================
+// THREAT HUNTING QUERY 01: Full Kill Chain - Campaign Overview
+// ============================================================
+// Purpose:
+//   Classifies every security alert into its corresponding
+//   MITRE ATT&CK phase and returns a summary of the full
+//   campaign: alert counts, unique accounts, and timeline.
+//
+// Privacy: Account names hashed with SHA-256 (first 12 chars).
+//          Attacker IPs retained as public IoCs.
+//
+// Usage: Run in Microsoft Sentinel Logs or Advanced Hunting.
+//        Switch to "Chart" tab for visual timeline.
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(7d)
+| extend Fase = case(
+    AlertName == "Password Spray",
+        "Phase 1 - Initial Access      | T1110 - Password Spray",
+    AlertName in ("Anonymous IP address", "Anomalous Token"),
+        "Phase 2 - Defense Evasion     | T1090 - Tor/VPN/Token Theft",
+    AlertName in (
+        "Atypical travel",
+        "Unfamiliar sign-in properties",
+        "Account compromised following a password-spray attack",
+        "Malicious sign in from an IP address associated with recognized attacker infrastructure",
+        "Leaked credentials",
+        "Compromised user account in a recognized attack pattern",
+        "Potential user account compromise identified through attack analysis"),
+        "Phase 3 - Confirmed Compromise | T1078 - Valid Accounts",
+    AlertName == "Suspicious service principal sign-in following credential addition",
+        "Phase 4 - Persistence          | T1098 - Service Principal Backdoor",
+    AlertName in (
+        "Email reported by user as malware or phish",
+        "Email reported by user as junk",
+        "Unfamiliar email sign-in by high-risk user"),
+        "Phase 5 - Lateral Movement     | T1566 - Internal Phishing",
+    AlertName == "Malware detection",
+        "Phase 6 - Execution/Payload    | T1204 - Malware via OneDrive",
+    "OTHER")
+| where Fase != "OTHER"
+| extend ParsedEntities = parse_json(Entities)
+| mvexpand ParsedEntities
+| where tostring(ParsedEntities.Type) == "account"
+| extend RawAccount = tostring(ParsedEntities.Name)
+| where isnotempty(RawAccount)
+| extend AccountID = strcat("acct_", substring(hash_sha256(RawAccount), 0, 12))
+| summarize
+    TotalAlerts    = count(),
+    UniqueAccounts = dcount(RawAccount),
+    AccountHashes  = make_set(AccountID),
+    FirstSeen      = min(TimeGenerated),
+    LastSeen       = max(TimeGenerated)
+    by Fase
+| sort by Fase asc

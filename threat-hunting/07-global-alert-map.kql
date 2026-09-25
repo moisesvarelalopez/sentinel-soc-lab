@@ -1,0 +1,21 @@
+// ============================================================
+// THREAT HUNTING QUERY 07: Global Alert Inventory (30 Days)
+// ============================================================
+// Purpose:
+//   Inventories all alert types fired across the tenant in the
+//   last 30 days, sorted by volume. Provides a holistic overview
+//   of threat vectors and noise levels.
+//
+// No PII present: aggregates counts, severity, and provider names.
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(30d)
+| summarize
+    TotalAlerts = count(),
+    Severity    = any(AlertSeverity),
+    Provider    = any(ProviderName),
+    FirstSeen   = min(TimeGenerated),
+    LastSeen    = max(TimeGenerated)
+    by AlertName
+| sort by TotalAlerts desc

@@ -1,0 +1,42 @@
+// ============================================================
+// THREAT HUNTING QUERY 03: Confirmed Compromised Accounts
+// ============================================================
+// Purpose:
+//   Identifies accounts with confirmed unauthorized access
+//   based on multi-signal evidence from Entra ID Protection
+//   and Microsoft Threat Protection.
+//   Ranks accounts by alert count to prioritize investigation.
+//
+// Privacy: Account names hashed with SHA-256 (first 12 chars).
+//          Format: acct_[12-char-hash]
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(7d)
+| where AlertName in (
+    "Atypical travel",
+    "Unfamiliar sign-in properties",
+    "Account compromised following a password-spray attack",
+    "Malicious sign in from an IP address associated with recognized attacker infrastructure",
+    "Leaked credentials",
+    "Compromised user account in a recognized attack pattern",
+    "Potential user account compromise identified through attack analysis")
+| extend ParsedEntities = parse_json(Entities)
+| mvexpand ParsedEntities
+| where tostring(ParsedEntities.Type) == "account"
+| extend RawAccount = tostring(ParsedEntities.Name)
+| where isnotempty(RawAccount)
+| extend AccountID = strcat("acct_", substring(hash_sha256(RawAccount), 0, 12))
+| summarize
+    EvidenceTypes = make_set(AlertName),
+    TotalAlerts   = count(),
+    FirstAccess   = min(TimeGenerated),
+    LastAccess    = max(TimeGenerated)
+    by AccountID
+| sort by TotalAlerts desc
+
+// ── Findings Summary ─────────────────────────────────────────
+// 34 unique accounts with confirmed unauthorized access
+// Campaign active from 21 September to 25 September 2026
+// Top compromised account: 38 alerts over 4 days
+// ============================================================

@@ -1,0 +1,49 @@
+// ============================================================
+// THREAT HUNTING QUERY 06: Daily Campaign Timeline
+// ============================================================
+// Purpose:
+//   Shows the daily progression of each attack phase
+//   to visualize campaign escalation over time.
+//
+//   Switch to the "Chart" tab in Sentinel Logs for a
+//   visual stacked bar chart of the attack timeline.
+//
+// No PII present: only alert counts per phase per day.
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(7d)
+| extend Phase = case(
+    AlertName == "Password Spray",
+        "1-Initial Access",
+    AlertName in ("Anonymous IP address", "Anomalous Token"),
+        "2-Defense Evasion",
+    AlertName in (
+        "Atypical travel",
+        "Unfamiliar sign-in properties",
+        "Account compromised following a password-spray attack",
+        "Leaked credentials",
+        "Compromised user account in a recognized attack pattern",
+        "Potential user account compromise identified through attack analysis",
+        "Malicious sign in from an IP address associated with recognized attacker infrastructure"),
+        "3-Confirmed Compromise",
+    AlertName == "Suspicious service principal sign-in following credential addition",
+        "4-Persistence",
+    AlertName in (
+        "Email reported by user as malware or phish",
+        "Email reported by user as junk"),
+        "5-Phishing",
+    AlertName == "Malware detection",
+        "6-Malware",
+    "Other")
+| where Phase != "Other"
+| summarize Events = count() by Phase, bin(TimeGenerated, 1d)
+| sort by TimeGenerated asc, Phase asc
+
+// ── Campaign Timeline ─────────────────────────────────────────
+// Day 1 (21 Sept): Phases 1, 2, 3, 5 active
+// Day 2 (22 Sept): Phases 1, 2, 3 continue
+// Day 3 (23 Sept): Phases 1, 2, 3, 5, 6 - Malware appears
+// Day 4 (24 Sept): All 6 phases - Persistence backdoors deployed
+// Day 5 (25 Sept): Phases 1, 2, 3 still active (ongoing)
+// ============================================================

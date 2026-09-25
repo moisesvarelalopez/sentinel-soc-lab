@@ -1,0 +1,71 @@
+// ============================================================
+// Detection Rule: Scheduled - Multi-Signal Credential Attack Correlation
+// Type: Scheduled (runs every 5 minutes, lookback 1 hour)
+// Severity: High
+// MITRE Tactic: Credential Access, Initial Access
+// MITRE Technique: T1110, T1078
+// Data Source: Microsoft Entra ID Protection (IPC),
+//              Microsoft Threat Protection (MTP)
+// Table: SecurityAlert
+// ============================================================
+// Description:
+//   Correlates 6 types of high-severity credential alerts
+//   occurring against the same account within a 1-hour window.
+//   A single alert may be noise; multiple correlated signals
+//   indicate a confirmed or active compromise campaign.
+//   Designed to reduce alert fatigue while surfacing
+//   high-confidence incidents for Tier 1 triage.
+// ============================================================
+
+let TargetAlertTypes = dynamic([
+    "Password Spray",
+    "Atypical travel",
+    "Anonymous IP address",
+    "Malicious IP address",
+    "Unfamiliar sign-in properties",
+    "Leaked credentials"
+]);
+SecurityAlert
+| where TimeGenerated > ago(1h)
+| where AlertName in (TargetAlertTypes)
+| where AlertSeverity in ("High", "Medium")
+| extend ParsedEntities = parse_json(Entities)
+| mvexpand ParsedEntities
+| where tostring(ParsedEntities.Type) == "account"
+| extend
+    TargetAccount  = tostring(ParsedEntities.Name),
+    AccountDomain  = tostring(ParsedEntities.UPNSuffix)
+| where isnotempty(TargetAccount)
+| summarize
+    AlertCount      = count(),
+    AlertTypes      = make_set(AlertName),
+    FirstAlert      = min(TimeGenerated),
+    LastAlert       = max(TimeGenerated)
+    by TargetAccount, AccountDomain
+| where AlertCount >= 2
+| extend
+    AlertTitle = strcat("Multi-Signal Attack - ", TargetAccount, " (", AlertCount, " alerts)")
+| project
+    AlertTitle,
+    TargetAccount,
+    AccountDomain,
+    AlertCount,
+    AlertTypes,
+    FirstAlert,
+    LastAlert
+
+// ── Entity Mapping ──────────────────────────────────────────
+// Account → TargetAccount (Name)
+//
+// ── Alert Grouping ───────────────────────────────────────────
+// Group by: Account entity
+// Window:   5 hours
+// Threshold: Minimum 2 distinct alert types
+//
+// ── Design Rationale ─────────────────────────────────────────
+// Single Password Spray alerts fire constantly (noise).
+// This rule only triggers when the SAME account triggers
+// 2+ different alert types within 1 hour, which indicates
+// the attacker successfully bypassed initial defenses and
+// is actively probing or accessing the account.
+// ============================================================

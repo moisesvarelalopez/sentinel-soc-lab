@@ -1,0 +1,52 @@
+// ============================================================
+// THREAT HUNTING QUERY 04: Service Principal Backdoors (T1098)
+// ============================================================
+// Purpose:
+//   Detects the automated Python script that injected malicious
+//   credentials into Azure Enterprise Applications (Service
+//   Principals), establishing persistent backdoors that survive
+//   password resets and MFA enforcement.
+//
+//   This is a Day-0 detection: all 9 events occurred on the
+//   same day the backdoors were planted (24 September 2026).
+//
+// MITRE Technique: T1098 - Account Manipulation
+// Attacker Tool:   Python-urllib/3.11 (automated script)
+// Attacker IP:     98.167.221.41
+//
+// Privacy: Account names hashed. AppIDs and SPObjectIDs are
+//          identifiers of the MALICIOUS apps, not victims.
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(7d)
+| where AlertName == "Suspicious service principal sign-in following credential addition"
+| extend Ents = parse_json(Entities)
+| extend
+    RawAccount       = tostring(Ents[0].Name),
+    ServicePrincipal = tostring(Ents[1].ServicePrincipalObjectId),
+    AppID            = tostring(Ents[2].OAuthAppId),
+    UserAgent        = tostring(Ents[3].UserAgent),
+    AttackerIP       = tostring(Ents[4].Address)
+| extend AccountID = strcat("acct_", substring(hash_sha256(RawAccount), 0, 12))
+| project
+    TimeGenerated,
+    AccountID,
+    AppID,
+    ServicePrincipal,
+    AttackerIP,
+    UserAgent
+| sort by TimeGenerated asc
+
+// ── Backdoor Timeline (24 September 2026) ────────────────────
+// 14:23 - First backdoor planted
+// 14:38 - Second backdoor
+// 14:47 - Third backdoor
+// 15:08 - Fourth backdoor
+// 17:33 - Fifth backdoor
+// 17:34 - Sixth backdoor
+// 17:56 - Seventh backdoor
+// 18:08 - Eighth backdoor (last detected)
+//
+// All originating from: 98.167.221.41 | Python-urllib/3.11
+// ============================================================

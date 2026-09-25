@@ -1,0 +1,37 @@
+// ============================================================
+// THREAT HUNTING QUERY 02: Attacker IP Extraction and Ranking
+// ============================================================
+// Purpose:
+//   Extracts all attacker IPs from Password Spray alerts,
+//   ranks them by frequency, and provides geolocation context.
+//   These are IoCs that can be blocked at the firewall or
+//   Conditional Access policy level.
+//
+// Privacy: IPs belong to the ATTACKER - published as IoCs.
+//          No victim PII is present in this query.
+// ============================================================
+
+SecurityAlert
+| where TimeGenerated > ago(7d)
+| where AlertName == "Password Spray"
+| extend ParsedEntities = parse_json(Entities)
+| mvexpand ParsedEntities
+| where tostring(ParsedEntities.Type) == "ip"
+| extend
+    IPAddress = tostring(ParsedEntities.Address),
+    Country   = tostring(ParsedEntities.Location.CountryCode),
+    City      = tostring(ParsedEntities.Location.City)
+| where isnotempty(IPAddress)
+| summarize
+    Attacks  = count(),
+    FirstSeen = min(TimeGenerated),
+    LastSeen  = max(TimeGenerated)
+    by IPAddress, Country, City
+| sort by Attacks desc
+
+// ── Top Attacker IPs Identified ──────────────────────────────
+// 203.57.82.133   GB  London        10 attacks  (Primary node)
+// 203.17.244.189  NL  Amsterdam      9 attacks
+// 167.148.201.149 US  Liberty Lake   8 attacks
+// 98.167.221.41   US  [Persistence]  Script-based backdoor injector
+// ============================================================
