@@ -53,8 +53,8 @@ Engineered two complementary analytic rules to combat credential compromise:
 ![Alert Grouping](assets/05-alert-grouping.png)
 *Figure 2.5: Alert grouping configured for a 5-hour window to eliminate duplicate alert generation.*
 
-![Active Rules List](assets/06-active-rules-list.png)
-*Figure 2.6: Active custom detection rules deployed and monitoring the workspace.*
+![NRT Rule Configuration Summary](assets/06-active-rules-list.png)
+*Figure 2.6: Final configuration and review summary of the NRT Password Spray detection rule.*
 
 ---
 
