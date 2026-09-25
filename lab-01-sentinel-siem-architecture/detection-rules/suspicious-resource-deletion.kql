@@ -1,0 +1,37 @@
+// ============================================================
+// Detection Rule: Suspicious Resource Deletion or Administrative Activity
+// Severity: Medium
+// MITRE Tactic: Impact (T1485), Defense Evasion (T1562.001)
+// Data Source: Azure Activity Log
+// Table: AzureActivity
+// Query Frequency: 5 minutes | Query Period: 24 hours
+// ============================================================
+// Description:
+//   Detects successful deletions of critical Azure resources or
+//   resource groups by administrative identities. Simulates
+//   malicious insider sabotage or compromised credential impact.
+// ============================================================
+
+AzureActivity
+| where OperationNameValue has "delete"
+| where ActivityStatusValue in~ ("Success", "Succeeded")
+| project
+    TimeGenerated,
+    Caller,
+    CallerIpAddress,
+    OperationNameValue,
+    ResourceGroup,
+    Resource,
+    ActivityStatusValue,
+    SubscriptionId
+
+// ── Entity Mapping ──────────────────────────────────────────
+// Account ➔ Caller (UPN / Name)
+// IP      ➔ CallerIpAddress (Address)
+//
+// ── Alert Grouping ───────────────────────────────────────────
+// Grouping: Enabled on matching Account + IP entities
+// Window:   5 hours
+// Purpose:  Consolidate bursts of deletion operations into a
+//           single actionable security incident.
+// ============================================================
